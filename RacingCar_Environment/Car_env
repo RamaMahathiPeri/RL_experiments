@@ -1,0 +1,116 @@
+#IMPORT DEPENDENCIES 
+import gymnasium as gym
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.evaluation import evaluate_policy
+import os 
+import pygame
+pygame.init()
+import torch
+
+
+
+#from gymnasium.wrappers.monitoring import video_recorder
+#from gymnasium.wrappers.record_video import RecordVideo
+
+
+
+# Check if MPS is available (for M1/M2 Macs)
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+    print("MPS (Metal) backend is available. Using GPU.")
+else:
+    device = torch.device("cpu")
+    print("MPS backend not available. Using CPU.")
+
+#ENVIRONMENT 
+environment_name = 'CarRacing-v2'
+env = gym.make(environment_name)
+
+#print(env.reset())# reset at random 
+#print('????????')
+#print(env.action_space)# taking a look at observational space 
+#env.render()# taking a look at the env 
+#print('+++++++++')
+# TESTING THE ENVIRONMENT 
+
+# Reset the environment (handle both observation and info)
+obs, info = env.reset()
+
+# Run episodes to test the environment
+episodes = 5
+for episode in range(1, episodes + 1):
+    obs, info = env.reset()
+    done = False
+    score = 0
+
+    while not done:
+        #env.render()  # Render each frame
+        action = env.action_space.sample()  # Take a random action
+        obs, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated  # Check if the episode has ended
+        score += reward
+    
+    print(f'Episode: {episode} Score: {score}')
+
+env.close()
+
+# TRAINING THE MODEL 
+
+env = gym.make(environment_name)
+env = DummyVecEnv([lambda: env])
+
+log_path = os.path.join('Training','Logs')
+model = PPO('CnnPolicy',env,verbose=1,tensorboard_log=log_path,device="mps")
+
+model.learn(total_timesteps=1500000)
+
+
+# saving the model 
+
+PPO_Path = os.path.join('Training','Saved Models','PPO_Model_RacingCar')
+
+print(PPO_Path)
+
+model.save(PPO_Path)
+
+# remodeling the model 
+del model   
+
+model = PPO.load(PPO_Path,env=env,device="mps")
+
+# Evaluation
+
+eval = evaluate_policy(model, env, n_eval_episodes= 10, render= True)
+print(eval)
+
+env.close # closing the environment 
+
+# Test the model 
+
+episodes = 30 # trying to loop the env 10 times 
+for episode in range(1,episodes+1):
+    print(env.reset())
+    obs = env.reset() # setting the initial set of observation as intial state 
+    done= False  # setting temp variables
+    score= 0  # setting temp variables
+    
+    while not done:
+        #env.render() # allows to view the graphical representation of the env 
+        action,_ = model.predict(obs) # we are using the model here 
+        print(action.shape)
+        print('***********')
+        print(env.step(action))
+        obs,reward,done,info = env.step(action)
+        score = score + reward
+    print('Episode:{} Score:{}'.format(episode,score))
+env.close()
+
+
+
+
+##### viewing the logs in Tensorboard 
+import os
+training_log_path= os.path.join('/Users/ramamahathiperi/Desktop/RL_Nick/02_Car-environment /Training/Logs/','PPO_3')
+print(training_log_path)
+# tensorboard --logdir=(training_log_path) (command to be used in terminal )
